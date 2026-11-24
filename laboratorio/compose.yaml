@@ -1,0 +1,126 @@
+
+# Laboratorio EV3 - OCY1102
+# Sistema Alumnos - Pipeline DevSecOps
+#
+# Jenkins:    puerto 8080
+# Produccion: puerto 5000
+# Staging:    puerto 5001
+# Prometheus: puerto 9090
+# Grafana:    puerto 3000
+#
+# Los secretos se almacenan fuera de Git.
+
+name: examen-ev3
+
+services:
+
+  jenkins:
+    build: ./jenkins
+    image: examen-ev3-jenkins:latest
+    container_name: ev3-jenkins
+
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:5001:5001"
+
+    environment:
+      JAVA_OPTS: -Xmx1g
+
+    secrets:
+      - zap_api_key
+      - flask_secret_key
+      - admin_password_hash
+
+    volumes:
+      - jenkins_home:/var/jenkins_home
+
+    restart: unless-stopped
+
+  taller:
+    image: examen-ev3-jenkins:latest
+    pull_policy: never
+    container_name: ev3-taller
+
+    depends_on:
+      - jenkins
+
+    entrypoint: ["sleep", "infinity"]
+    working_dir: /work
+
+    volumes:
+      - ..:/work
+
+  zap:
+    image: zaproxy/zap-stable:2.16.1
+    container_name: ev3-zap
+
+    entrypoint: ["sh", "-c"]
+
+    command:
+      - >-
+        exec zap.sh -daemon -silent
+        -host 0.0.0.0 -port 8080
+        -config api.key="$$(cat /run/secrets/zap_api_key)"
+        -config api.addrs.addr.name=.*
+        -config api.addrs.addr.regex=true
+
+    secrets:
+      - zap_api_key
+
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ev3-prometheus
+
+    ports:
+      - "127.0.0.1:${EV3_PROM_PORT:-9090}:9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: ev3-grafana
+
+    ports:
+      - "127.0.0.1:${EV3_GRAFANA_PORT:-3000}:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    secrets:
+      - grafana_password
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+    depends_on:
+      - prometheus
+
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  zap_api_key:
+    file: ./secrets/zap_api_key.txt
+
+  grafana_password:
+    file: ./secrets/grafana_password.txt
+
+  flask_secret_key:
+    file: ./secrets/flask_secret_key.txt
+
+  admin_password_hash:
+    file: ./secrets/admin_password_hash.txt

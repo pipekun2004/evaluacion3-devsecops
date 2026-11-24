@@ -51,15 +51,46 @@ pipeline {
 
         // >>> [SEGURIDAD]: aquí van las etapas "Security Review (SAST)" y "Dependency Management"
 
-        // >>> [ZAP]: aquí van las etapas "Deploy Staging" y "DAST - OWASP ZAP"
 
-        stage('Deploy Producción') {
-            // >>> [GATE]: aquí va la condición "when" que protege producción
+        stage('Deploy Staging') {
             steps {
-                sh 'bash scripts/deploy.sh produccion 5000'
-                script { env.PRODUCCION = env.APP_VERSION }
+                sh 'bash scripts/deploy.sh staging 5001'
             }
         }
+
+        stage('DAST - OWASP ZAP') {
+            steps {
+                script {
+                    int resultado = sh(
+                        script: 'ZAP_API_KEY_FILE=/run/secrets/zap_api_key .venv/bin/python scripts/zap_scan.py http://ev3-jenkins:5001',
+                        returnStatus: true
+                    )
+
+                    if (resultado == 2) {
+                        unstable('OWASP ZAP encontró alertas High/Medium')
+                    } else if (resultado != 0) {
+                        error("Error durante el escaneo ZAP. Código: ${resultado}")
+                    }
+                }
+            }
+        }
+
+
+
+        stage('Deploy Producción') {
+            when {
+                expression {
+                    currentBuild.currentResult == 'SUCCESS'
+                }
+            }
+            steps {
+                sh 'bash scripts/deploy.sh produccion 5000'
+                script {
+                    env.PRODUCCION = env.APP_VERSION
+                }
+            }
+        }
+
     }
 
     post {

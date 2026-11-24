@@ -7,21 +7,26 @@ y un **commit** (usa el identificador `VULN-xx` en el mensaje del commit).
 
 ## 1. Revisiones de seguridad realizadas
 
+
 | # | Etapa del SDLC | Herramienta / técnica | Build | Resultado (resumen) |
 |---|---|---|---|---|
-| R1 | Código (SAST) | Bandit en el pipeline | #__ | __ hallazgos High / __ Medium / __ Low |
-| R2 | Dependencias (SCA) | pip-audit en el pipeline | #__ | __ vulnerabilidades en __ paquetes |
-| R3 | Pruebas dinámicas (DAST) | OWASP ZAP sobre staging | #__ | __ High / __ Medium / __ Low |
-| R4 | Revisión manual | Lectura de `app.py` | — | |
-| R5 | Producción | Grafana + Prometheus | — | |
+| R1 | Código (SAST) | Bandit en Codespaces | Pendiente | Análisis inicial: 2 High, 2 Medium y 1 Low. Análisis posterior: 0 hallazgos en 205 líneas. |
+| R2 | Dependencias (SCA) | pip-audit | Pendiente | Análisis pendiente de ejecución. |
+| R3 | Pruebas dinámicas (DAST) | OWASP ZAP sobre staging | Pendiente | Escaneo pendiente de ejecución. |
+| R4 | Revisión manual | Lectura de app.py | No aplica | Se revisaron consultas SQL, autenticación, credenciales y configuración de Flask. |
+| R5 | Producción | Grafana + Prometheus | Pendiente | Verificación de métricas e incidentes pendiente. |
 
 ## 2. Vulnerabilidades identificadas y corregidas
 
+
 | ID | Vulnerabilidad (CWE) | Detectada por | Ubicación | Riesgo | Corrección aplicada | Commit | Build que lo verifica |
 |---|---|---|---|---|---|---|---|
-| VULN-01 | | | `app.py:__` | | | | #__ |
-| VULN-02 | | | | | | | |
-| VULN-03 | | | | | | | |
+| VULN-01 | Inyección SQL (CWE-89) | Bandit B608 | app.py:205 | Medio | Consulta parametrizada con SQLite y manejo seguro de errores. | Pendiente | Pendiente |
+| VULN-02 | Uso de MD5 (CWE-327) | Bandit B324 | app.py:221 | Alto | Reemplazo por check_password_hash de Werkzeug. | Pendiente | Pendiente |
+| VULN-03 | Contraseña fija (CWE-798) | Bandit B105 | app.py:20 | Bajo | Credenciales externas mediante Docker Secrets. | Pendiente | Pendiente |
+| VULN-04 | Depuración habilitada (CWE-94) | Bandit B201 | app.py:241 | Alto | Desactivación de debug=True. | Pendiente | Pendiente |
+| VULN-05 | Exposición de interfaces (CWE-605) | Bandit B104 | app.py:241 | Medio | Servidor de desarrollo limitado a 127.0.0.1. | Pendiente | Pendiente |
+
 
 (Agrega las filas que necesites.)
 

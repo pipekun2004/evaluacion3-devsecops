@@ -9,6 +9,21 @@
 # entorno virtual y su propia base de datos. Solo se instalan las dependencias de EJECUCIÓN.
 set -euo pipefail
 
+# Cargar credenciales de forma segura desde Docker Secrets.
+FLASK_SECRET_KEY="$(cat /run/secrets/flask_secret_key)"
+ADMIN_PASSWORD_HASH="$(cat /run/secrets/admin_password_hash)"
+
+# Comprobar que los secretos estén disponibles.
+if [[ -z "$FLASK_SECRET_KEY" || -z "$ADMIN_PASSWORD_HASH" ]]; then
+    echo "ERROR: faltan credenciales seguras de Flask"
+    exit 1
+fi
+
+export FLASK_SECRET_KEY
+export ADMIN_PASSWORD_HASH
+
+
+
 ENTORNO="${1:?Indica el entorno: staging o produccion}"
 PUERTO="${2:?Indica el puerto}"
 APP_VERSION="${APP_VERSION:-dev}"

@@ -5,7 +5,7 @@
 Además de las rutas de negocio, la app publica métricas para Prometheus en /metrics.
 Las métricas de seguridad (logins fallidos y peticiones sospechosas) se ven en Grafana.
 """
-import hashlib
+
 import os
 import re
 import sqlite3
@@ -13,13 +13,15 @@ import time
 
 from flask import Flask, Response, g, jsonify, render_template_string, request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
 
 ## Clave de la aplicación y credenciales del administrador.
-SECRET_KEY = "SecureDev-2024-clave-super-secreta"
-ADMIN_USUARIO = "admin"
-ADMIN_CLAVE_MD5 = "21232f297a57a5a743894a0e4a801fc3"
+SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "")
+ADMIN_USUARIO = os.environ.get("ADMIN_USUARIO", "admin")
+ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
+
 app.config["SECRET_KEY"] = SECRET_KEY
 
 ## Versión desplegada: la inyecta el pipeline (1.0.<build>+<commit>). Sirve para la trazabilidad.
@@ -195,6 +197,7 @@ def obtener_alumno(alumno_id):
     return jsonify(dict(fila))
 
 
+
 @app.route("/alumnos/buscar")
 def buscar_alumnos():
     """!
@@ -202,12 +205,14 @@ def buscar_alumnos():
     @return JSON con los alumnos encontrados.
     """
     nombre = request.args.get("nombre", "")
-    consulta = f"SELECT * FROM alumnos WHERE nombre LIKE '%{nombre}%'"
+    consulta = "SELECT * FROM alumnos WHERE nombre LIKE ?"
     try:
-        filas = conectar().execute(consulta).fetchall()
-    except sqlite3.Error as error:
-        return jsonify({"error": str(error), "consulta": consulta}), 500
+        filas = conectar().execute(consulta, (f"%{nombre}%",)).fetchall()
+    except sqlite3.Error:
+        app.logger.exception("Error al buscar alumnos")
+        return jsonify({"error": "Error interno al realizar la búsqueda"}), 500
     return jsonify([dict(f) for f in filas])
+
 
 
 @app.route("/login", methods=["POST"])
@@ -216,14 +221,26 @@ def login():
     @brief Valida las credenciales del administrador enviadas por formulario.
     @return JSON con el resultado; 401 si las credenciales no son válidas.
     """
+
     usuario = request.form.get("usuario", "")
     clave = request.form.get("clave", "")
-    if usuario == ADMIN_USUARIO and hashlib.md5(clave.encode()).hexdigest() == ADMIN_CLAVE_MD5:
+
+    if (
+        ADMIN_PASSWORD_HASH
+        and usuario == ADMIN_USUARIO
+        and check_password_hash(ADMIN_PASSWORD_HASH, clave)
+    ):
         LOGIN_EXITOSOS.inc()
         return jsonify({"mensaje": "Bienvenido, administrador"})
+
     LOGIN_FALLIDOS.inc()
-    app.logger.warning("Login fallido para el usuario '%s' desde %s", usuario, request.remote_addr)
+    app.logger.warning(
+        "Login fallido para el usuario '%s' desde %s",
+        usuario,
+        request.remote_addr
+    )
     return jsonify({"error": "Credenciales inválidas"}), 401
+
 
 
 @app.route("/metrics")
@@ -237,5 +254,6 @@ def metrics():
 
 iniciar_db()
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=False)
