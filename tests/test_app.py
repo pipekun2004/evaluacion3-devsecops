@@ -67,3 +67,31 @@ def test_metricas(client):
     assert r.status_code == 200
     assert b"http_requests_total" in r.data
     assert b"login_fallidos_total" in r.data
+
+
+def test_xss_bloqueado(client):
+    respuesta = client.get(
+        "/hello",
+        query_string={"name": "<script>alert(1)</script>"}
+    )
+
+    assert respuesta.status_code == 200
+    assert b"<script>" not in respuesta.data
+    assert b"&lt;script&gt;" in respuesta.data
+
+
+def test_csrf_sin_token(client):
+    respuesta = client.post(
+        "/login",
+        data={"usuario": "admin", "clave": "incorrecta"}
+    )
+
+    assert respuesta.status_code == 400
+
+
+def test_cabeceras_seguridad(client):
+    respuesta = client.get("/")
+
+    assert "Content-Security-Policy" in respuesta.headers
+    assert respuesta.headers["X-Frame-Options"] == "DENY"
+    assert respuesta.headers["X-Content-Type-Options"] == "nosniff"

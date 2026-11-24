@@ -38,9 +38,13 @@ y un **commit** (usa el identificador `VULN-xx` en el mensaje del commit).
 
 ## 4. Monitoreo e incidentes
 
-| Hora | Panel / métrica de Grafana | Qué se observó | Entorno | Clasificación | Acción de respuesta | Verificación |
+
+| Hora aproximada | Panel / métrica | Qué se observó | Entorno | Clasificación | Acción de respuesta | Verificación |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 23:35–23:38 (23/11) | login_fallidos_total | Incremento de intentos fallidos durante ZAP | Staging | Evento de seguridad de prueba | Revisión de logs Flask y resultados DAST | Logs y build Jenkins #4 |
+| 24/11 (verificación) | up | Producción no respondía (0) | Producción | Incidente de disponibilidad | Diagnóstico de Gunicorn y mantenimiento del bloqueo de despliegue | Prometheus confirmó up=0; pendiente recuperación |
+| 24/11 (verificación) | up | Staging no respondía (0) | Staging | Incidente de disponibilidad | Reinicio de staging mediante deploy.sh | Endpoint /health respondió; Prometheus up=1 |
+
 
 ## 5. Gestión de dependencias
 

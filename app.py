@@ -10,22 +10,28 @@ import os
 import re
 import sqlite3
 import time
+from flask_wtf.csrf import CSRFProtect
 
 from flask import Flask, Response, g, jsonify, render_template_string, request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from werkzeug.security import check_password_hash
 
+
 app = Flask(__name__)
 
-## Clave de la aplicación y credenciales del administrador.
+### Clave de la aplicación y credenciales del administrador.
 SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "")
 ADMIN_USUARIO = os.environ.get("ADMIN_USUARIO", "admin")
 ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
 
 app.config["SECRET_KEY"] = SECRET_KEY
 
-## Versión desplegada: la inyecta el pipeline (1.0.<build>+<commit>). Sirve para la trazabilidad.
+# Activar protección CSRF
+csrf = CSRFProtect(app)
+
+### Versión desplegada
 VERSION = os.environ.get("APP_VERSION", "dev")
+
 ## Archivo SQLite con los alumnos (cada entorno usa el suyo).
 DB_PATH = os.environ.get("DB_PATH", "alumnos.db")
 
@@ -68,10 +74,14 @@ PORTADA = """<!doctype html>
   <input name="nombre" value="Ana"> <button type="submit">Buscar</button>
 </form>
 <h2>Acceso administrador</h2>
+
 <form action="/login" method="post">
-  <input name="usuario" value="admin"> <input name="clave" type="password" value="">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input name="usuario" value="admin">
+  <input name="clave" type="password" value="">
   <button type="submit">Entrar</button>
 </form>
+
 </body>
 </html>"""
 
@@ -123,18 +133,41 @@ def antes_de_la_peticion():
             app.logger.warning("Petición sospechosa (%s) desde %s a %s", tipo, request.remote_addr, request.path)
 
 
+
 @app.after_request
 def despues_de_la_peticion(respuesta):
-    """!
-    @brief Registra la métrica de cada petición atendida.
-    @param respuesta Respuesta que Flask enviará al cliente.
-    @return La misma respuesta.
-    """
+    """Registra métricas HTTP y agrega cabeceras de seguridad."""
+
+    # Registrar métricas para Prometheus
     endpoint = request.url_rule.rule if request.url_rule else "desconocido"
+
     if endpoint != "/metrics":
-        HTTP_PETICIONES.labels(request.method, endpoint, str(respuesta.status_code)).inc()
-        HTTP_LATENCIA.labels(endpoint).observe(time.perf_counter() - g.get("inicio", time.perf_counter()))
+        HTTP_PETICIONES.labels(
+            request.method,
+            endpoint,
+            str(respuesta.status_code)
+        ).inc()
+
+        HTTP_LATENCIA.labels(endpoint).observe(
+            time.perf_counter() - g.get("inicio", time.perf_counter())
+        )
+
+    # Cabeceras HTTP de seguridad
+    respuesta.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'"
+    )
+
+    respuesta.headers["X-Frame-Options"] = "DENY"
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+
     return respuesta
+
 
 
 @app.route("/")
@@ -146,14 +179,17 @@ def portada():
     return render_template_string(PORTADA, version=VERSION)
 
 
+
 @app.route("/hello")
 def hello():
-    """!
-    @brief Saluda al usuario cuyo nombre llega en el parámetro de URL «name».
-    @return Página HTML con el saludo.
-    """
+    """Genera un saludo escapando los datos proporcionados por el usuario."""
     name = request.args.get("name", "visitante")
-    return f"<h1>Hola, {name}!</h1>"
+
+    return render_template_string(
+        "<h1>Hola, {{ nombre }}</h1>",
+        nombre=name
+    )
+
 
 
 @app.route("/health")

@@ -40,7 +40,10 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh '.venv/bin/python -m pytest --junitxml=reports/junit.xml'
+                sh '''
+    FLASK_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
+    .venv/bin/python -m pytest --junitxml=reports/junit.xml
+'''
             }
             post {
                 always {
@@ -49,7 +52,25 @@ pipeline {
             }
         }
 
-        // >>> [SEGURIDAD]: aquí van las etapas "Security Review (SAST)" y "Dependency Management"
+
+stage('Security Review (SAST)') {
+    steps {
+        sh '''
+            .venv/bin/python -m pip install --quiet bandit==1.8.6
+            .venv/bin/python -m bandit -r app.py -ll
+        '''
+    }
+}
+
+stage('Dependency Management (SCA)') {
+    steps {
+        sh '''
+            .venv/bin/python -m pip install --quiet pip-audit==2.9.0
+            .venv/bin/python -m pip_audit -r requirements.txt
+        '''
+    }
+}
+
 
 
         stage('Deploy Staging') {
